@@ -1,0 +1,110 @@
+---
+title: "practical-machine-learning-project.Rmd"
+output: html_document
+---
+
+## Load and clean data
+
+I decided to remove all columns containing more than 90% of NA values. I tested for non-informative (near zero variation) features in preprocessed data with but got none. 
+
+```{r}
+library(caret)
+data <- read.csv("pml-training.csv", na.strings=c("","NA","#DIV/0!"))
+validation <- read.csv("pml-testing.csv", na.strings=c("","NA","#DIV/0!"))
+
+naCounts <- apply(data, 2, function(x) sum(is.na(x)))
+columnsToIgnore <- c(names(data)[naCounts > 0.9 * nrow(data)], names(data)[1:7])
+columnNumbersToIgnore <- which(names(data) %in% columnsToIgnore)
+
+data <- data[, -columnNumbersToIgnore]
+validation <- validation[, -columnNumbersToIgnore]
+```
+
+Partition data to training and testing set
+```{r}
+set.seed(331)
+inTrain <- createDataPartition(y=data$classe, p=0.7, list=FALSE)
+training <- data[inTrain,]
+testing <- data[-inTrain,]
+```
+
+## Exploratory data analysis
+
+```{r}
+features <- testing[, -53]
+prComp <- prcomp((features - apply(features,2,mean))/apply(features,2,sd))
+qplot(prComp$x[,1], prComp$x[,2], colour=testing$classe)
+
+pc1 <-log10(sort(abs(prComp$rotation[,1]), decreasing=T))
+pc2 <-log10(sort(abs(prComp$rotation[,2]), decreasing=T))
+
+pc1 <- prComp$rotation[,1]
+pc2 <- prComp$rotation[,2]
+
+mostImportant <- names(sort(pc1^2, decreasing=T)[1:5])
+
+# 5 most importnt features
+qplot(abs(pc1)[mostImportant], abs(pc2)[mostImportant], colour=mostImportant) 
+````
+
+## Training 
+
+### Random Forest
+Use parallel computation package to speedup the training process.
+```{r, cache=TRUE}
+library(doMC)
+# https://class.coursera.org/predmachlearn-016/forum/thread?thread_id=31#post-148
+registerDoMC(cores=4)
+ptm <- proc.time()
+trainControlRf <- trainControl(method = "cv", number = 3, allowParallel = TRUE)
+modFitRf <- train(classe~., data = training, method="rf", trControl = trainControlRf, prox=FALSE)
+proc.time.rf <- proc.time() - ptm
+
+# predict
+prediction.rf <- predict(modFitRf, training)
+table(prediction.rf, training$classe)
+
+prediction.rf <- predict(modFitRf, testing)
+table(prediction.rf, testing$classe)
+
+```
+### Stohastics Gradient Boosting Algorithm
+Do the training using Stohastics Gradient Boosting Algorithm
+
+```{r, cache=TRUE}
+ptm <- proc.time()
+modFitBoost <- train(classe ~ ., method="gbm", data=training, verbose=F)
+proc.time.boost <- proc.time() - ptm
+```
+
+Make prediction of the training set
+
+```{r}
+predict.testing.boost <- predict(modFitBoost, training)
+table(predict.testing.boost, training$classe)
+```
+
+Predict testing set
+
+```{r}
+# random forest
+answers.rf <- as.character(predict(modFitRf, validation))
+print(answers.rf)
+
+# boost
+answers.boost <- as.character(predict(modFitBoost, validation))
+print(answers.boost)
+
+```
+
+Export answers to files
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("answers/problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(answers.rf)
+```

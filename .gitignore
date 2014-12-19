@@ -1,0 +1,8 @@
+.Rproj.user
+.Rhistory
+.RData
+pml-project_cache/*
+pml-project_files/*
+*.csv
+*.Rproj
+
