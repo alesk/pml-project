@@ -1,17 +1,34 @@
 ---
 title: "practical-machine-learning-project.Rmd"
-output: html_document
+output:
+    html_document:
+        theme: united
+        highlight: zenburn
+        cache: true
+        cache.path: pml-project_cache
 ---
 
 ## Load and clean data
 
 I decided to remove all columns containing more than 90% of NA values. I tested for non-informative (near zero variation) features in preprocessed data with but got none. 
 
-```{r}
+```{r, cache=TRUE, results='hide'}
 library(caret)
-data <- read.csv("pml-training.csv", na.strings=c("","NA","#DIV/0!"))
-validation <- read.csv("pml-testing.csv", na.strings=c("","NA","#DIV/0!"))
+library(knitr)
+library(RCurl)
 
+trainingUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+data <- read.csv(textConnection(getURL(trainingUrl)), na.strings=c("","NA","#DIV/0!"))
+
+validationUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+validation <- read.csv(textConnection(getURL(validationUrl)), na.strings=c("","NA","#DIV/0!"))
+```
+
+## Cleaning data
+
+I removed all rows containgin more the 90% of NA values.
+
+```{r, results='hide'}
 naCounts <- apply(data, 2, function(x) sum(is.na(x)))
 columnsToIgnore <- c(names(data)[naCounts > 0.9 * nrow(data)], names(data)[1:7])
 columnNumbersToIgnore <- which(names(data) %in% columnsToIgnore)
@@ -20,7 +37,11 @@ data <- data[, -columnNumbersToIgnore]
 validation <- validation[, -columnNumbersToIgnore]
 ```
 
-Partition data to training and testing set
+## Cross validation
+
+The data is partitioned into training set concisting of 70% randomly selected rows and to training
+set concisting of the residual rows. The `set.seed` is used for reproducibility. 
+
 ```{r}
 set.seed(331)
 inTrain <- createDataPartition(y=data$classe, p=0.7, list=FALSE)
@@ -45,59 +66,92 @@ mostImportant <- names(sort(pc1^2, decreasing=T)[1:5])
 
 # 5 most importnt features
 qplot(abs(pc1)[mostImportant], abs(pc2)[mostImportant], colour=mostImportant) 
-````
+```
 
 ## Training 
 
-### Random Forest
-Use parallel computation package to speedup the training process.
-```{r, cache=TRUE}
-library(doMC)
+To speed up training process, I used the `doMC` library for parallel computing on posix OS. To do job in parallel
+on windows, one should use `doSnow` package.
+
+```{r, cache=TRUE, results='hide'}
 # https://class.coursera.org/predmachlearn-016/forum/thread?thread_id=31#post-148
-registerDoMC(cores=4)
-ptm <- proc.time()
+registerDoMC(cores=detectCores())
+```
+
+I trained two models. One with the *random forest* algorithm and the second with *stohastics gradient boosting*.
+Random forest produced little better out of sample error (generalization error). 
+
+### Random Forest
+
+```{r, cache=TRUE, results='hide'}
 trainControlRf <- trainControl(method = "cv", number = 3, allowParallel = TRUE)
 modFitRf <- train(classe~., data = training, method="rf", trControl = trainControlRf, prox=FALSE)
-proc.time.rf <- proc.time() - ptm
-
-# predict
-prediction.rf <- predict(modFitRf, training)
-table(prediction.rf, training$classe)
-
-prediction.rf <- predict(modFitRf, testing)
-table(prediction.rf, testing$classe)
-
 ```
+
+```{r, results='hide'}
+rf.prediction <- predict(modFitRf, testing)
+rf.confussion.matrix <- table(rf.prediction, testing$classe)
+rf.computation.time <- modFitRf$times$everything[3]
+#rf.overall.accuracy <- modFitRf$results[which(modFitRf$results$mtry==modFitRf$bestTune),2]
+
+rf.overall.accuracy <- mean(rf.prediction == testing$classe)
+```
+
+Training took `r rf.computation.time` seconds. Overall (not by class) out of sample accuracy achieved was `r rf.overall.accuracy`.
+
+The confusion matrix assesing testing data is
+
+```{r, echo=FALSE, results='asis'}
+kable(rf.confussion.matrix)
+```
+
 ### Stohastics Gradient Boosting Algorithm
 Do the training using Stohastics Gradient Boosting Algorithm
 
-```{r, cache=TRUE}
-ptm <- proc.time()
+```{r, cache=TRUE, results='hide'}
 modFitBoost <- train(classe ~ ., method="gbm", data=training, verbose=F)
-proc.time.boost <- proc.time() - ptm
+``` 
+
+```{r, cache=TRUE, results='hide'}
+boost.prediction <- predict(modFitBoost, testing)
+boost.confussion.matrix <- table(boost.prediction, testing$classe)
+boost.computation.time <- modFitBoost$times$everything[3]
+#boost.overall.accuracy <- modFitBoost$results[which(
+#  modFitBoost$results$interaction.depth == modFitBoost$bestTune$interaction.depth & 
+#  modFitBoost$results$n.trees == modFitBoost$bestTune$n.trees),4]
+
+boost.overall.accuracy <- mean(boost.prediction == testing$classe)
 ```
 
-Make prediction of the training set
+Training took `r boost.computation.time` seconds. Overall in sample accuracy achieved was `r boost.overall.accuracy`.
 
-```{r}
-predict.testing.boost <- predict(modFitBoost, training)
-table(predict.testing.boost, training$classe)
+The confusion matrix assesing testing data is
+
+```{r, echo=FALSE, results='asis'}
+kable(boost.confussion.matrix)
 ```
 
-Predict testing set
+### Put the models to test with the validation data set
 
-```{r}
+Both models were good enough to correctly predict all of the validation set cases.
+
+```{r, results='hide'}
 # random forest
 answers.rf <- as.character(predict(modFitRf, validation))
-print(answers.rf)
 
 # boost
 answers.boost <- as.character(predict(modFitBoost, validation))
-print(answers.boost)
 
+answers <- as.data.frame(t(as.matrix(data.frame(random.forest=answers.boost, boost=answers.boost))))
+names(answers) <- 1:20
 ```
 
-Export answers to files
+Answers from both, random forest and boost model:
+```{r, echo=FALSE, results='asis'}
+kable(answers)
+```
+
+### Export answers to files
 ```{r}
 pml_write_files = function(x){
   n = length(x)
