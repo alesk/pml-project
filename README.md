@@ -1,9 +1,30 @@
 # Project for the Coursera course Practical Machine Learning
 
-To produce the final output, use the following sequence of R command:
+This is the project for Coursera class Practical Machine Learning.
+
+
+The output file is prerendered at [pml-project.html][2] The original source Rmarkdon file
+is [pml-project.Rmd][1]
+
+## Reporduction steps
+
+The project dependencies, besides R, are [pandoc][3] and the following R packages:
+
+  - caret
+  - knitr
+  - rmarkdown
+  - doMC
+
+and their dependecies.
+
+For rendering the final project, `rmakdown` is used together with `pandoc`. To produce the final output, 
+use the following sequence of R command:
 
     library(rmarkdown)
     render("pml-project.Rmd", output_format="html")
 
-The output file is prerendered at http://pml-project.github.com. The original source Rmarkdon file
-is [https://github.com/alesk/pml-project/blob/master/pml-project.Rmd](pml-project.Rmd)
+
+
+[1]: http://alesk.github.io/pml-project/pml-project.html#/
+[2]: https://github.com/alesk/pml-project/blob/master/pml-project.Rmd
+[3]: http://johnmacfarlane.net/pandoc/
