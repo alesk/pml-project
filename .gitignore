@@ -5,4 +5,7 @@ pml-project_cache/*
 pml-project_files/*
 *.csv
 *.Rproj
-
+*.pdf
+*.html
+figure/*
+pml-project.md

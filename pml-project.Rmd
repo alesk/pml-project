@@ -1,18 +1,24 @@
 ---
-title: "practical-machine-learning-project.Rmd"
+title: "Practical Machine Learning Project"
 output:
     html_document:
         theme: united
         highlight: zenburn
         cache: true
-        cache.path: pml-project_cache
+        self-contained: true
 ---
+
+The goal of this project is to train a model on data provided by the [http://groupware.les.inf.puc-rio.br/har](Human activity Recognition Dataset). The dataset includes processed data from multiple sensors positioned on the body during the exercise. Participants were required to do the exercise the right way (class A) and the wrong way (classes B to E). The classes B to E represent the common failure people tend to do during this type of exercise.
+The name of the feture labeling the class of exercise is named `classe`.
+
+The validation data set is provided to check the accuracy of the trained model.
 
 ## Load and clean data
 
-I decided to remove all columns containing more than 90% of NA values. I tested for non-informative (near zero variation) features in preprocessed data with but got none. 
+Manual inspection of the data revealed that NA values are in the form of "", "NA" and "#DIV/0". The training
+and validation datasets are downloaded from url directly to help with the reproducibility of the analysis/training.
 
-```{r, cache=TRUE, results='hide'}
+```{r, cache=TRUE, results='hide', echo=FALSE}
 library(caret)
 library(knitr)
 library(RCurl)
@@ -24,9 +30,7 @@ validationUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testin
 validation <- read.csv(textConnection(getURL(validationUrl)), na.strings=c("","NA","#DIV/0!"))
 ```
 
-## Cleaning data
-
-I removed all rows containgin more the 90% of NA values.
+I decided to remove all features containgin more the 90% of NA values.
 
 ```{r, results='hide'}
 naCounts <- apply(data, 2, function(x) sum(is.na(x)))
@@ -37,35 +41,18 @@ data <- data[, -columnNumbersToIgnore]
 validation <- validation[, -columnNumbersToIgnore]
 ```
 
+After removing the features with most NA values, there are `r ncol(data)-1` features left.
+
 ## Cross validation
 
 The data is partitioned into training set concisting of 70% randomly selected rows and to training
 set concisting of the residual rows. The `set.seed` is used for reproducibility. 
 
-```{r}
+```{r, results='hide'}
 set.seed(331)
-inTrain <- createDataPartition(y=data$classe, p=0.7, list=FALSE)
+inTrain  <- createDataPartition(y=data$classe, p=0.7, list=FALSE)
 training <- data[inTrain,]
-testing <- data[-inTrain,]
-```
-
-## Exploratory data analysis
-
-```{r}
-features <- testing[, -53]
-prComp <- prcomp((features - apply(features,2,mean))/apply(features,2,sd))
-qplot(prComp$x[,1], prComp$x[,2], colour=testing$classe)
-
-pc1 <-log10(sort(abs(prComp$rotation[,1]), decreasing=T))
-pc2 <-log10(sort(abs(prComp$rotation[,2]), decreasing=T))
-
-pc1 <- prComp$rotation[,1]
-pc2 <- prComp$rotation[,2]
-
-mostImportant <- names(sort(pc1^2, decreasing=T)[1:5])
-
-# 5 most importnt features
-qplot(abs(pc1)[mostImportant], abs(pc2)[mostImportant], colour=mostImportant) 
+testing  <- data[-inTrain,]
 ```
 
 ## Training 
@@ -74,12 +61,12 @@ To speed up training process, I used the `doMC` library for parallel computing o
 on windows, one should use `doSnow` package.
 
 ```{r, cache=TRUE, results='hide'}
-# https://class.coursera.org/predmachlearn-016/forum/thread?thread_id=31#post-148
+library(doMC)
 registerDoMC(cores=detectCores())
 ```
 
 I trained two models. One with the *random forest* algorithm and the second with *stohastics gradient boosting*.
-Random forest produced little better out of sample error (generalization error). 
+Random forest produced little smaller out of sample error (generalization error) than the stohastic gradient boosting. 
 
 ### Random Forest
 
@@ -92,46 +79,41 @@ modFitRf <- train(classe~., data = training, method="rf", trControl = trainContr
 rf.prediction <- predict(modFitRf, testing)
 rf.confussion.matrix <- table(rf.prediction, testing$classe)
 rf.computation.time <- modFitRf$times$everything[3]
-#rf.overall.accuracy <- modFitRf$results[which(modFitRf$results$mtry==modFitRf$bestTune),2]
-
 rf.overall.accuracy <- mean(rf.prediction == testing$classe)
 ```
 
-Training took `r rf.computation.time` seconds. Overall (not by class) out of sample accuracy achieved was `r rf.overall.accuracy`.
+Training took `r round(rf.computation.time)` seconds. Overall (not by class) out of sample accuracy achieved was **`r sprintf("%.3f%%", rf.overall.accuracy*100)`**.
 
-The confusion matrix assesing testing data is
+The confusion matrix for random forest is
 
 ```{r, echo=FALSE, results='asis'}
 kable(rf.confussion.matrix)
 ```
 
-### Stohastics Gradient Boosting Algorithm
-Do the training using Stohastics Gradient Boosting Algorithm
+### Stohastic Gradient Boosting Algorithm
+The stohastic gradient boosting algorithm is known to produce the models that comapre in the accuracy with the random forest. In this case, the out of sample error rate was a little worse and the training time was almost 3 time as long as of
+random forest.
 
 ```{r, cache=TRUE, results='hide'}
 modFitBoost <- train(classe ~ ., method="gbm", data=training, verbose=F)
 ``` 
 
-```{r, cache=TRUE, results='hide'}
+```{r, results='hide'}
 boost.prediction <- predict(modFitBoost, testing)
 boost.confussion.matrix <- table(boost.prediction, testing$classe)
 boost.computation.time <- modFitBoost$times$everything[3]
-#boost.overall.accuracy <- modFitBoost$results[which(
-#  modFitBoost$results$interaction.depth == modFitBoost$bestTune$interaction.depth & 
-#  modFitBoost$results$n.trees == modFitBoost$bestTune$n.trees),4]
-
 boost.overall.accuracy <- mean(boost.prediction == testing$classe)
 ```
 
-Training took `r boost.computation.time` seconds. Overall in sample accuracy achieved was `r boost.overall.accuracy`.
+Training took `r round(boost.computation.time)` seconds. Overall in sample accuracy achieved was `r sprintf("%.3f%%", boost.overall.accuracy*100)`. The accuracy is somewhat lower than that of random forest model.
 
-The confusion matrix assesing testing data is
+The confusion matrix for stohastic gradient boosting is
 
 ```{r, echo=FALSE, results='asis'}
 kable(boost.confussion.matrix)
 ```
 
-### Put the models to test with the validation data set
+### Validating both models
 
 Both models were good enough to correctly predict all of the validation set cases.
 
@@ -147,12 +129,14 @@ names(answers) <- 1:20
 ```
 
 Answers from both, random forest and boost model:
+
 ```{r, echo=FALSE, results='asis'}
 kable(answers)
 ```
 
-### Export answers to files
-```{r}
+
+```{r, echo=FALSE}
+# export answers to files
 pml_write_files = function(x){
   n = length(x)
   for(i in 1:n){
