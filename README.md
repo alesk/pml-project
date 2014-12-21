@@ -1,10 +1,10 @@
-# Project for the Coursera course Practical Machine Learning
+# Practical Machine Learning
 
 This is the project for Coursera class Practical Machine Learning.
 
 
-The output file is prerendered at [pml-project.html][2] The original source Rmarkdon file
-is [pml-project.Rmd][1]
+The output file is prerendered at [pml-project.html][1] The original source Rmarkdon file
+is [pml-project.Rmd][2]
 
 ## Reporduction steps
 
@@ -15,10 +15,10 @@ The project dependencies, besides R, are [pandoc][3] and the following R package
   - rmarkdown
   - doMC
 
-and their dependecies.
+and their respective dependecies.
 
 For rendering the final project, `rmakdown` is used together with `pandoc`. To produce the final output, 
-use the following sequence of R command:
+use the following sequence of R commands:
 
     library(rmarkdown)
     render("pml-project.Rmd", output_format="html")
